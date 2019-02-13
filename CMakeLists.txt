@@ -199,6 +199,9 @@ install(DIRECTORY launch/
   FILES_MATCHING PATTERN "*.launch"
 )
 
+install(PROGRAMS scripts/centauro_audio_echo.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(PROGRAMS scripts/centauro_audio_echo.py DESTINATION bin)
+
 
 #############
 ## Testing ##

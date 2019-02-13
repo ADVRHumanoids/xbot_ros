@@ -1,0 +1,5 @@
+<launch>
+
+    <node pkg="xbot_ros" type="centauro_audio_echo.py" name="centauro_audio_echo" output="screen"/>
+    
+</launch>
