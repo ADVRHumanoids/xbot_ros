@@ -1,0 +1,5 @@
+<launch>
+
+    <node pkg="xbot_ros" type="robot_state_logger" name="robot_state_logger" required="true" output="screen"/>
+    
+</launch>

@@ -11,6 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   xbot_msgs
 )
 
+find_package(XBotInterface REQUIRED)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -111,12 +113,27 @@ catkin_package(
 ## Build ##
 ###########
 
+add_compile_options(-std=c++11)
+
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
 # include
-  ${catkin_INCLUDE_DIRS}
+   ${XBotInterface_INCLUDE_DIRS} 
+   ${catkin_INCLUDE_DIRS}
 )
+
+find_package(matlogger2 QUIET)
+if(${matlogger2_FOUND})
+    add_executable(robot_state_logger src/robot_state_logger.cpp)
+    target_link_libraries(robot_state_logger ${catkin_LIBRARIES} ${XBotInterface_LIBRARIES} matlogger2::matlogger2)
+    set_target_properties(robot_state_logger PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+    install(TARGETS robot_state_logger
+      ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+      LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+      RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+    )
+endif()
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -177,11 +194,11 @@ include_directories(
 # )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  FILES_MATCHING PATTERN "*.launch"
+)
+
 
 #############
 ## Testing ##
