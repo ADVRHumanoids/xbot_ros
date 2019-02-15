@@ -1,0 +1,20 @@
+<launch>
+  <machine name="centauro-pilot-pc" address="10.24.4.77" user="centauro" env-loader="/home/centauro/devel-superbuild/external/xbot_ros/scripts/env-loader.sh">
+  </machine>
+
+    <arg name="namespace" default="/"/>
+
+    <group ns="$(arg namespace)">
+    
+        <param name="joy_node/dev" type="str" value="/dev/input/js0" />
+        <param name="joy_node/deadzone" type="double" value="0.1" />
+        <param name="joy_node/coalesce_interval" type="double" value="0.1" />
+        <node machine="centauro-pilot-pc" pkg="joy" type="joy_node" name="joy_node" output="screen">
+            <remap from="joy" to="cartesian/joy/"/>
+        </node>
+        
+        <node machine="centauro-pilot-pc" pkg="cartesian_interface" type="joystick_spawner" name="joystick" output="screen"/>
+    
+    </group>
+
+</launch>
