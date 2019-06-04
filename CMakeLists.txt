@@ -7,11 +7,9 @@ project(xbot_ros)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  xbot_msgs
-)
-
+find_package(catkin REQUIRED) 
 find_package(XBotInterface REQUIRED)
+find_package(xbot_msgs REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -121,6 +119,7 @@ include_directories(
 # include
    ${XBotInterface_INCLUDE_DIRS} 
    ${catkin_INCLUDE_DIRS}
+   ${xbot_msgs_INCLUDE_DIRS}
 )
 
 find_package(matlogger2 QUIET)
