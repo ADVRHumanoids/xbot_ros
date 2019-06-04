@@ -7,7 +7,7 @@ project(xbot_ros)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED) 
+find_package(catkin REQUIRED roscpp) 
 find_package(XBotInterface REQUIRED)
 find_package(xbot_msgs REQUIRED)
 
@@ -147,7 +147,22 @@ endif()
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/xbot_ros_node.cpp)
+add_executable(torque_offset_calib src/torque_offset_calib.cpp)
+
+target_link_libraries(torque_offset_calib
+  PRIVATE
+  ${catkin_LIBRARIES}
+  ${XBotInterface_LIBRARIES}
+  yaml-cpp
+)
+
+target_compile_definitions(torque_offset_calib PRIVATE -DYAML_DEST_PATH="${CMAKE_CURRENT_BINARY_DIR}/tau_offset.yaml")
+
+install(TARGETS torque_offset_calib
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,9 +175,6 @@ endif()
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
 
 #############
 ## Install ##
@@ -179,11 +191,6 @@ endif()
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
 
 ## Mark cpp header files for installation
 # install(DIRECTORY include/${PROJECT_NAME}/
