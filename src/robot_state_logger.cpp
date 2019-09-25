@@ -33,7 +33,7 @@ void log_chain_ids(xbot_msgs::JointStateConstPtr msg)
             auto it = std::find(msg->name.begin(), msg->name.end(), jname);
             if(it != msg->name.end())
             {
-                ch_idx.push_back(it - msg->name.begin() + 1); // NOTE MATLAB 1-BASED INDEXING 
+                ch_idx.push_back(it - msg->name.begin() + 1); // NOTE MATLAB 1-BASED INDEXING
             }
         }
         g_logger->add(pair.first, ch_idx);
@@ -46,7 +46,7 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
     {
         XBot::MatLogger2::Options opt;
         opt.enable_compression = true;
-	opt.default_buffer_size = 1000;
+        opt.default_buffer_size = 1000;
         g_logger = XBot::MatLogger2::MakeLogger("/tmp/robot_state_log", opt);
         
         g_appender->add_logger(g_logger);
@@ -66,6 +66,8 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
     g_logger->add("effort_reference", msg->effort_reference);
     g_logger->add("current", msg->aux);
     g_logger->add("fault", msg->fault);
+    g_logger->add("temperature_driver", msg->temperature_driver);
+    g_logger->add("temperature_motor", msg->temperature_motor);
     g_logger->add("time", msg->header.stamp.toSec());
     g_logger->add("seq", msg->header.seq);
     
@@ -86,8 +88,8 @@ void on_timer_event(const ros::WallTimerEvent& event,
     
     if(!g_logger && (!check_host_reachable() || !ros::master::check()))
     {
-	g_logger.reset();
-	heartbeat();
+        g_logger.reset();
+        heartbeat();
         std::cout << "Lost connection with master" << std::endl;
         g_needs_restart = true;
         ros::shutdown();
@@ -95,8 +97,8 @@ void on_timer_event(const ros::WallTimerEvent& event,
     
     if(g_logger && !g_msg_received)
     {
-	g_logger.reset();
-	heartbeat();
+        g_logger.reset();
+        heartbeat();
         std::cout << "No message received from joint states" << std::endl;
         g_needs_restart = true;
         ros::shutdown();
@@ -117,10 +119,10 @@ int logger_main(int argc, char** argv,
 {
     signal(SIGINT, logger_sigint_handler);
     
-    ros::init(argc, argv, 
-              "robot_state_logger", 
+    ros::init(argc, argv,
+              "robot_state_logger",
               ros::init_options::NoSigintHandler
-             );
+              );
     
     std::cout << "Waiting for ROS master..." << std::endl;
     
@@ -146,16 +148,16 @@ int logger_main(int argc, char** argv,
             continue;
         }
         
-//         try
-//         {
-//             XBot::ConfigOptionsFromParamServer();
-//         }
-//         catch(std::exception& e)
-//         {
-//             printf("Unable to obtain model (%s)\n", e.what());
-//             sleep(1);
-//             continue;
-//         }
+        //         try
+        //         {
+        //             XBot::ConfigOptionsFromParamServer();
+        //         }
+        //         catch(std::exception& e)
+        //         {
+        //             printf("Unable to obtain model (%s)\n", e.what());
+        //             sleep(1);
+        //             continue;
+        //         }
         
         break;
 
@@ -172,13 +174,13 @@ int logger_main(int argc, char** argv,
     ros::NodeHandle nh;
     
     ros::Subscriber js_sub =  nh.subscribe("xbotcore/joint_states",
-                                           5, 
+                                           5,
                                            on_js_received);
 
-    ros::WallTimer timer = nh.createWallTimer(ros::WallDuration(0.5), 
+    ros::WallTimer timer = nh.createWallTimer(ros::WallDuration(0.5),
                                               boost::bind(on_timer_event, _1, heartbeat));
     
-        
+
     g_appender = XBot::MatAppender::MakeInstance();
     g_appender->start_flush_thread();
     timer.start();
@@ -190,7 +192,7 @@ int logger_main(int argc, char** argv,
     
     printf("logger exiting with return code %d\n", g_needs_restart);
 
-    return g_needs_restart;   
+    return g_needs_restart;
     
 }
 
@@ -250,7 +252,7 @@ int main(int argc, char **argv)
         
         /* Parent process */
         close(pipe_fd[1]);
-        fcntl(pipe_fd[0], F_SETFL, O_NONBLOCK); 
+        fcntl(pipe_fd[0], F_SETFL, O_NONBLOCK);
         
         while(g_run)
         {
@@ -314,7 +316,7 @@ int main(int argc, char **argv)
     printf("waiting logger exit..\n");
     waitpid(logger_pid, nullptr, 0);
     printf("main exiting..\n");
-        
+
     return 0;
     
     

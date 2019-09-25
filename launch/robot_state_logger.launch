@@ -1,5 +1,8 @@
 <launch>
 
-    <node pkg="xbot_ros" type="robot_state_logger" name="robot_state_logger" required="true" output="screen"/>
+    <node pkg="xbot_ros" type="robot_state_logger" name="robot_state_logger" required="true" output="screen">
+        <remap from="robot_description" to="xbotcore/robot_description"/>
+        <remap from="robot_description_semantic" to="xbotcore/robot_description_semantic"/>
+    </node>
     
 </launch>
