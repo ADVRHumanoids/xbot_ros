@@ -10,9 +10,13 @@
 
 
 #include <ros/ros.h>
+#include <xbot_msgs/JointState.h>
+#include <geometry_msgs/WrenchStamped.h>
+#include <sensor_msgs/Imu.h>
+#include <eigen_conversions/eigen_msg.h>
+
 #include <XBotInterface/XBotInterface.h>
 #include <RobotInterfaceROS/ConfigFromParam.h>
-#include <xbot_msgs/JointState.h>
 #include <matlogger2/matlogger2.h>
 #include <matlogger2/utils/mat_appender.h>
 
@@ -70,8 +74,35 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
     g_logger->add("temperature_motor", msg->temperature_motor);
     g_logger->add("time", msg->header.stamp.toSec());
     g_logger->add("seq", msg->header.seq);
-    
+
     g_msg_received = true;
+}
+
+void on_ft_received(geometry_msgs::WrenchStampedConstPtr msg, std::string name)
+{
+    Eigen::Vector6d w;
+    tf::wrenchMsgToEigen(msg->wrench, w);
+
+    g_logger->add(name + "_wrench", w);
+    g_logger->add(name + "_ts", msg->header.stamp.toSec());
+}
+
+void on_imu_received(sensor_msgs::ImuConstPtr msg, std::string name)
+{
+    Eigen::Quaterniond q;
+    tf::quaternionMsgToEigen(msg->orientation, q);
+
+    Eigen::Vector3d omega;
+    tf::vectorMsgToEigen(msg->angular_velocity, omega);
+
+    Eigen::Vector3d acc;
+    tf::vectorMsgToEigen(msg->linear_acceleration, acc);
+
+    g_logger->add(name + "_rot", q.coeffs());
+    g_logger->add(name + "_omega", omega);
+    g_logger->add(name + "_lin_acc", acc);
+    g_logger->add(name + "_ts", msg->header.stamp.toSec());
+
 }
 
 bool check_host_reachable()
@@ -165,16 +196,35 @@ int logger_main(int argc, char** argv,
     }
     
     std::cout << "Connected to ROS master!" << std::endl;
+
+    ros::NodeHandle nh("xbotcore");
     
-    auto cfg = XBot::ConfigOptionsFromParamServer();
+    auto cfg = XBot::ConfigOptionsFromParamServer(nh);
     XBot::XBotInterface xbi;
     xbi.init(cfg);
     g_model = &xbi;
     
-    ros::NodeHandle nh;
+
+    std::vector<ros::Subscriber> subs;
+
+    for(auto ft : xbi.getForceTorque())
+    {
+        auto ft_sub = nh.subscribe<geometry_msgs::WrenchStamped>(
+                    "ft/" + ft.first, 15,
+                    std::bind(on_ft_received, std::placeholders::_1, ft.first));
+        subs.push_back(ft_sub);
+    }
+
+    for(auto imu : xbi.getImu())
+    {
+        auto imu_sub = nh.subscribe<sensor_msgs::Imu>(
+                    "imu/" + imu.first, 15,
+                    std::bind(on_imu_received, std::placeholders::_1, imu.first));
+        subs.push_back(imu_sub);
+    }
     
-    ros::Subscriber js_sub =  nh.subscribe("xbotcore/joint_states",
-                                           5,
+    ros::Subscriber js_sub =  nh.subscribe("joint_states",
+                                           15,
                                            on_js_received);
 
     ros::WallTimer timer = nh.createWallTimer(ros::WallDuration(0.5),
@@ -184,6 +234,8 @@ int logger_main(int argc, char** argv,
     g_appender = XBot::MatAppender::MakeInstance();
     g_appender->start_flush_thread();
     timer.start();
+
+    printf("Started spinning.. \n");
     
     ros::spin();
     
