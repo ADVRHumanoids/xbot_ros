@@ -1,5 +1,4 @@
 #include "AuxRosPublisher.h"
-#include <std_msgs/Float32.h>
 
 using namespace XBot;
 
@@ -23,7 +22,6 @@ AuxRosPublisher::AuxRosPublisher():
 
 bool XBot::AuxRosPublisher::init_control_plugin(Handle::Ptr handle)
 {
-
     _robot = handle->getRobotInterface();
 
     auto rosh = handle->getRosHandle();
@@ -32,7 +30,7 @@ bool XBot::AuxRosPublisher::init_control_plugin(Handle::Ptr handle)
     for(auto pair : _name_to_aux_idx)
     {
         AuxPubData pub_data;
-        pub_data.pub = rosh->advertise<xbot_msgs::AuxState>("/xbotcore/aux/" + pair.first, 30);
+        pub_data.pub = rosh->advertise<xbot_msgs::AuxState>("/xbotcore/aux/" + pair.first, 10);
         pub_data.msg.aux.assign(_robot->getJointNum(), -1);
         pub_data.msg.name = _robot->getEnabledJointNames();
         pub_data.msg.aux_field_name = pair.first;
@@ -69,7 +67,6 @@ bool XBot::AuxRosPublisher::init_control_plugin(Handle::Ptr handle)
         }
     }
 
-    _test = rosh->advertise<std_msgs::Float32>("/ciao", 100);
     return true;
 }
 
@@ -81,12 +78,6 @@ void XBot::AuxRosPublisher::control_loop(double time, double period)
     // iter
     static int iter = 0;
     iter++;
-
-    std_msgs::Float32 mtest;
-    mtest.data = iter;
-    _test->pushToQueue(mtest);
-
-    return;
 
     // for each joint...
     for(int i = 0; i < _robot->getJointNum(); i++)

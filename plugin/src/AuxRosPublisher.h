@@ -35,7 +35,6 @@ private:
     int _aux_current_idx;
     std::vector<AuxPubData> _pubs;
 
-    RosUtils::PublisherWrapper::Ptr _test;
 
 
 
