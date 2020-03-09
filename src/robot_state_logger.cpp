@@ -11,6 +11,7 @@
 
 #include <ros/ros.h>
 #include <xbot_msgs/JointState.h>
+#include <xbot_msgs/AuxState.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <eigen_conversions/eigen_msg.h>
@@ -19,6 +20,8 @@
 #include <RobotInterfaceROS/ConfigFromParam.h>
 #include <matlogger2/matlogger2.h>
 #include <matlogger2/utils/mat_appender.h>
+
+#include "../plugin/src/AuxRosPublisher.h"
 
 
 bool g_msg_received  = false;
@@ -105,6 +108,12 @@ void on_imu_received(sensor_msgs::ImuConstPtr msg, std::string name)
 
 }
 
+void on_aux_received(xbot_msgs::AuxStateConstPtr msg)
+{
+    g_logger->add("aux_" + msg->aux_field_name, msg->aux);
+    g_logger->add("aux_" + msg->aux_field_name + "_ts", msg->header.stamp.toSec());
+}
+
 bool check_host_reachable()
 {
     std::string command = "ping -c 1 -W 1 " + ros::master::getHost() + " 1>/dev/null";
@@ -179,17 +188,6 @@ int logger_main(int argc, char** argv,
             continue;
         }
         
-        //         try
-        //         {
-        //             XBot::ConfigOptionsFromParamServer();
-        //         }
-        //         catch(std::exception& e)
-        //         {
-        //             printf("Unable to obtain model (%s)\n", e.what());
-        //             sleep(1);
-        //             continue;
-        //         }
-        
         break;
 
         
@@ -221,6 +219,14 @@ int logger_main(int argc, char** argv,
                     "imu/" + imu.first, 15,
                     std::bind(on_imu_received, std::placeholders::_1, imu.first));
         subs.push_back(imu_sub);
+    }
+
+    for(auto aux_pair : GetAuxFieldMap())
+    {
+        auto aux_sub = nh.subscribe<xbot_msgs::AuxState>(
+                    "aux/" + aux_pair.first, 10,
+                    on_aux_received);
+        subs.push_back(aux_sub);
     }
     
     ros::Subscriber js_sub =  nh.subscribe("joint_states",

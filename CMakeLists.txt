@@ -111,7 +111,7 @@ catkin_package(
 ## Build ##
 ###########
 
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++14)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -132,6 +132,11 @@ if(${matlogger2_FOUND})
       LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
+endif()
+
+find_package(XCM QUIET)
+if(${XCM_FOUND})
+    add_subdirectory(plugin)
 endif()
 
 ## Declare a C++ library
