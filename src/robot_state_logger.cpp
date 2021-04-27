@@ -80,6 +80,11 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
 
 void on_ft_received(geometry_msgs::WrenchStampedConstPtr msg, std::string name)
 {
+    if(!g_logger)
+    {
+        return;
+    }
+
     Eigen::Vector6d w;
     tf::wrenchMsgToEigen(msg->wrench, w);
 
@@ -89,6 +94,11 @@ void on_ft_received(geometry_msgs::WrenchStampedConstPtr msg, std::string name)
 
 void on_imu_received(sensor_msgs::ImuConstPtr msg, std::string name)
 {
+    if(!g_logger)
+    {
+        return;
+    }
+
     Eigen::Quaterniond q;
     tf::quaternionMsgToEigen(msg->orientation, q);
 
