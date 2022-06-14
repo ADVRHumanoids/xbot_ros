@@ -8,9 +8,10 @@
 #include <sys/select.h>
 #include <sys/fcntl.h>
 
-
 #include <ros/ros.h>
 #include <xbot_msgs/JointState.h>
+#include <xbot_msgs/CustomState.h>
+
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <eigen_conversions/eigen_msg.h>
@@ -19,40 +20,225 @@
 #include <RobotInterfaceROS/ConfigFromParam.h>
 #include <matlogger2/matlogger2.h>
 #include <matlogger2/utils/mat_appender.h>
+#include <matlogger2/mat_data.h>
 
+#include <map>
+
+using namespace std;
 
 bool g_msg_received  = false;
 bool g_needs_restart = false;
+
 XBot::MatLogger2::Ptr g_logger;
 XBot::MatAppender::Ptr g_appender;
 XBot::XBotInterface * g_model;
 
+volatile sig_atomic_t g_run = 1; // 0 only if SIGINT was received
+
+volatile int aux_types_encode_number = 0; // global counter used to assign incremental values to aux signal types
+
+volatile bool is_first_aux_msg= true; // auxiliary variable to know if an aux message was already received or not
+vector<int> indices; // global variable for holding the mapping
+
+// Empty map container for encoding (dynamically) the aux message types
+std::map<string, int> aux_msg_type_map;
+std::vector<string> js_names; // auxiliary vector where the joint names (as visible in the js message) are saved.
+
+void sigint_handler(int)
+{
+    printf("caught signal SIGINT\n");
+    g_run = 0;
+}
+
+void logger_sigint_handler(int)
+{
+    printf("logger: caught signal sigint\n");
+    ros::shutdown();
+}
+
+bool check_host_reachable()
+{
+    std::string command = "ping -c 1 -W 1 " + ros::master::getHost() + " 1>/dev/null";
+    return system(command.c_str()) == 0;
+}
+
+template <typename T, typename t_v >
+int find_index(vector<T> input_v, t_v value)
+{
+    /**
+    Finds the index of a value in an array.
+
+    @param input_v Input vector.
+    @param value Value to be searched within the input vector.
+
+    @return  The index of the element (-1 if not present).
+    */
+
+    auto it = find(input_v.begin(), input_v.end(), value);
+ 
+    // If element was found
+    if (it != input_v.end())
+    {
+        // calculating the index
+        int index = it - input_v.begin();
+        return index;
+    }
+    else 
+    {
+        // The element is not present in the vector
+        return -1;
+    }
+}
+
+template <typename T>
+vector<int> map_indices(vector<T> input_v1, vector<T> input_v2)
+{
+    /**
+    Maps the elements of the first input array to the second.
+
+    @param input_v1 First input vector.
+    @param input_v2 Second input vector.
+
+    @return  A vector of indices. indices_map[i] contains the index where the i-th element of input_v1 is present in input_v2.
+
+    */
+    
+    int v1_size = input_v1.size(); //initialize output
+    vector<int> indices_map(v1_size, -1);
+
+    // Here insert a check (size of input_v1 must equal size of input_v2)
+    for (int i = 0; i < input_v1.size(); i++)
+    {
+        indices_map[i] = find_index(input_v2, input_v1[i] );
+    }
+    return indices_map;
+}
+
+int aux_type_encoder(string msg_type)
+{
+    /**
+    Computes the code ID associated with a given message type and saves this code to the .mat file, 
+    so that other programs can interpret the signal-type information. To avoid the use of strings, a unique _aux_code suffix is employed.
+
+    @param msg_type The message type name (std::string).
+    @return The message code to be associated with the message type name
+    */
+
+    int msg_code;
+
+    if (aux_msg_type_map.find(msg_type) == aux_msg_type_map.end()) // msg_type not present
+    {   
+        aux_types_encode_number++; // increment last signal code number by 1
+        aux_msg_type_map.insert({msg_type, aux_types_encode_number}); // put the code in the dictionary
+        g_logger -> add(msg_type + "_aux_code", aux_types_encode_number); // add the pair key-value associated with this signal to the .mat file for post-processing
+    }
+
+    msg_code = aux_msg_type_map.at(msg_type); // read the key associated with the msg_type from the aux code map
+
+    return msg_code;
+}
+
+auto aux_mapper(xbot_msgs::CustomStateConstPtr msg)
+{
+
+    /**
+    Loops through the chains and their joints and, based on the received message, assigns the IDs associated with each message type.
+
+    @param msg Input message
+    @return A vector of signal IDs with dimension (number of chains)*(number of joints)
+    */
+
+    int n_names = msg->name.size(); // number of joints
+
+    std::vector<float> msg_value_remapped(n_names, -1); // output vector for msg values 
+    std::vector<int> msg_type_remapped(n_names, -1); // output vector for msg types 
+
+    if (is_first_aux_msg)
+    {
+        indices = map_indices(js_names, msg->name); // this runs only the first time an aux message is received (joint mapping is assumed to be constant throughout a session)
+      
+        is_first_aux_msg = false; // mapping not needed anymore 
+    }
+
+    for (int i = 0; i < n_names; i++) // mapping
+    {
+        int encoded_type = aux_type_encoder(msg->type[i]);
+        msg_type_remapped[indices[i]] = encoded_type;
+        msg_value_remapped[indices[i]] = msg->value[i];
+    }
+
+    return make_tuple(msg_type_remapped, msg_value_remapped);
+}
+
 void log_chain_ids(xbot_msgs::JointStateConstPtr msg)
 {
-    for(const auto& pair : g_model->getChainMap())
+    /**
+    Log information of the chain IDs (the joint IDs associated with each kinematic chain are saved in a .mat file under the name of the chain itself).
+
+    @param msg Pointer to the message.
+
+    */
+    ros::V_string ch_names;
+
+    for(const auto& pair : g_model->getChainMap()) // slide through each model chain
     {
-        std::vector<int> ch_idx;
-        for(const auto& jname : pair.second->getJointNames())
+        vector<int> ch_idx;
+        bool at_least1_jnt_found = false; // whether or not at least one joint from the msg was found in this chain
+
+        for(const auto& jname : pair.second->getJointNames()) // slide through each joint name of the chain
         {
-            auto it = std::find(msg->name.begin(), msg->name.end(), jname);
-            if(it != msg->name.end())
+            auto it = std::find(msg->name.begin(), msg->name.end(), jname); 
+            if(it != msg->name.end()) // found joint name of the robot in the received joint state message
             {
                 ch_idx.push_back(it - msg->name.begin() + 1); // NOTE MATLAB 1-BASED INDEXING
+                
+                if (!at_least1_jnt_found){at_least1_jnt_found=true;}
+                
             }
         }
+
+        if (at_least1_jnt_found){ch_names.push_back(pair.first);} // only add chain to .mat if at least one joint is associated with it (normally this check wouldn't be necessary)
+
         g_logger->add(pair.first, ch_idx);
     }
+    
+    js_names = msg->name; // assigning the received joint names to an auxiliary global vector (joint names and their order do not change by hypothesis)
+
+    auto jnames_cell = XBot::matlogger2::MatData::make_cell(js_names.size());
+    auto chnames_cell = XBot::matlogger2::MatData::make_cell(ch_names.size());
+
+    jnames_cell.asCell().assign(js_names.begin(), js_names.end());
+    chnames_cell.asCell().assign(ch_names.begin(), ch_names.end());
+
+    g_logger->save("joint_names", jnames_cell);
+    g_logger->save("chain_names", chnames_cell);
 }
 
 void on_js_received(xbot_msgs::JointStateConstPtr msg)
 {
+    /**
+    If a joint_states message is received, log the neccesary information to a .mat file.
+
+    @param msg Input message
+    */
+
     if(!g_logger)
     {
         XBot::MatLogger2::Options opt;
         opt.enable_compression = true;
         opt.default_buffer_size = 1000;
-        g_logger = XBot::MatLogger2::MakeLogger("/tmp/robot_state_log", opt);
-        
+
+        std::string mat_dump_path;
+        bool got_param = ros::param::get("/xbot_logger/mat_dump_path", mat_dump_path);
+        if (!got_param)
+        {   
+            g_logger = XBot::MatLogger2::MakeLogger("/tmp/robot_state_log", opt);
+        }
+        else
+        {
+            g_logger = XBot::MatLogger2::MakeLogger(mat_dump_path + "/robot_state_log", opt);
+        }
+
         g_appender->add_logger(g_logger);
         
         log_chain_ids(msg);
@@ -68,7 +254,6 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
     g_logger->add("position_reference", msg->position_reference);
     g_logger->add("velocity_reference", msg->velocity_reference);
     g_logger->add("effort_reference", msg->effort_reference);
-    g_logger->add("current", msg->aux);
     g_logger->add("fault", msg->fault);
     g_logger->add("temperature_driver", msg->temperature_driver);
     g_logger->add("temperature_motor", msg->temperature_motor);
@@ -76,6 +261,28 @@ void on_js_received(xbot_msgs::JointStateConstPtr msg)
     g_logger->add("seq", msg->header.seq);
 
     g_msg_received = true;
+}
+
+void on_aux_received(xbot_msgs::CustomStateConstPtr msg)
+{
+    /**
+    If a aux message is received, log the neccesary information to a .mat file.
+
+    @param msg Input message
+    */
+    
+    if(!g_logger)
+    {
+        return;
+    }
+    
+    auto remapped_tuple = aux_mapper(msg); // remapping aux types
+
+    g_logger->add("aux_time", msg->header.stamp.toSec());
+    g_logger->add("aux_seq", msg->header.seq);
+    g_logger->add("aux_type", std::get<0>(remapped_tuple));
+    g_logger->add("aux_value", std::get<1>(remapped_tuple));
+
 }
 
 void on_ft_received(geometry_msgs::WrenchStampedConstPtr msg, std::string name)
@@ -115,13 +322,6 @@ void on_imu_received(sensor_msgs::ImuConstPtr msg, std::string name)
 
 }
 
-bool check_host_reachable()
-{
-    std::string command = "ping -c 1 -W 1 " + ros::master::getHost() + " 1>/dev/null";
-    return system(command.c_str()) == 0;
-}
-
-
 void on_timer_event(const ros::WallTimerEvent& event, 
                     std::function<void(void)> heartbeat)
 {
@@ -147,12 +347,6 @@ void on_timer_event(const ros::WallTimerEvent& event,
     
     g_msg_received = false;
     
-}
-
-void logger_sigint_handler(int)
-{
-    printf("logger: caught signal sigint\n");
-    ros::shutdown();
 }
 
 int logger_main(int argc, char** argv, 
@@ -201,8 +395,6 @@ int logger_main(int argc, char** argv,
         //         }
         
         break;
-
-        
     }
     
     std::cout << "Connected to ROS master!" << std::endl;
@@ -237,6 +429,10 @@ int logger_main(int argc, char** argv,
                                            15,
                                            on_js_received);
 
+    ros::Subscriber aux_sub =  nh.subscribe("aux",
+                                           15,
+                                           on_aux_received);                                       
+
     ros::WallTimer timer = nh.createWallTimer(ros::WallDuration(0.5),
                                               boost::bind(on_timer_event, _1, heartbeat));
     
@@ -256,14 +452,6 @@ int logger_main(int argc, char** argv,
 
     return g_needs_restart;
     
-}
-
-volatile sig_atomic_t g_run = 1;
-
-void sigint_handler(int)
-{
-    printf("caught signal SIGINT\n");
-    g_run = 0;
 }
 
 int main(int argc, char **argv)
