@@ -138,7 +138,7 @@ int aux_type_encoder(string msg_type)
     return msg_code;
 }
 
-auto aux_mapper(xbot_msgs::CustomStateConstPtr msg)
+std::tuple<std::vector<int>, std::vector<float>> aux_mapper(xbot_msgs::CustomStateConstPtr msg)
 {
 
     /**
