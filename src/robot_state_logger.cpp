@@ -1,8 +1,6 @@
-#include <vector>
-#include <signal.h>
-#include <future>
 #include <chrono>
 #include <functional>
+#include <signal.h>
 
 #include <sys/wait.h>
 #include <sys/select.h>
@@ -16,8 +14,8 @@
 #include <sensor_msgs/Imu.h>
 #include <eigen_conversions/eigen_msg.h>
 
-#include <XBotInterface/XBotInterface.h>
-#include <RobotInterfaceROS/ConfigFromParam.h>
+#include <xbot2_interface/xbotinterface2.h>
+#include <xbot2_interface/ros/config_from_param.hpp>
 #include <matlogger2/matlogger2.h>
 #include <matlogger2/utils/mat_appender.h>
 #include <matlogger2/mat_data.h>
@@ -180,12 +178,12 @@ void log_chain_ids(xbot_msgs::JointStateConstPtr msg)
     */
     ros::V_string ch_names;
 
-    for(const auto& pair : g_model->getChainMap()) // slide through each model chain
+    for(const auto& ch : g_model->getChains()) // slide through each model chain
     {
         vector<int> ch_idx;
         bool at_least1_jnt_found = false; // whether or not at least one joint from the msg was found in this chain
 
-        for(const auto& jname : pair.second->getJointNames()) // slide through each joint name of the chain
+        for(const auto& jname : ch->getJointNames()) // slide through each joint name of the chain
         {
             auto it = std::find(msg->name.begin(), msg->name.end(), jname); 
             if(it != msg->name.end()) // found joint name of the robot in the received joint state message
@@ -197,9 +195,9 @@ void log_chain_ids(xbot_msgs::JointStateConstPtr msg)
             }
         }
 
-        if (at_least1_jnt_found){ch_names.push_back(pair.first);} // only add chain to .mat if at least one joint is associated with it (normally this check wouldn't be necessary)
+        if (at_least1_jnt_found){ch_names.push_back(ch->getName());} // only add chain to .mat if at least one joint is associated with it (normally this check wouldn't be necessary)
 
-        g_logger->add(pair.first, ch_idx);
+        g_logger->add(ch->getName(), ch_idx);
     }
     
     js_names = msg->name; // assigning the received joint names to an auxiliary global vector (joint names and their order do not change by hypothesis)
@@ -401,15 +399,14 @@ int logger_main(int argc, char** argv,
 
     ros::NodeHandle nh("xbotcore");
     
-    auto cfg = XBot::ConfigOptionsFromParamServer(nh);
-    XBot::XBotInterface xbi;
-    xbi.init(cfg);
-    g_model = &xbi;
+    auto cfg = XBot::Utils::ConfigOptionsFromParamServer(nh);
+    auto model = XBot::ModelInterface::getModel(cfg);
+    g_model = model.get();
     
 
     std::vector<ros::Subscriber> subs;
 
-    for(auto ft : xbi.getForceTorque())
+    for(auto ft : model->getForceTorque())
     {
         auto ft_sub = nh.subscribe<geometry_msgs::WrenchStamped>(
                     "ft/" + ft.first, 15,
@@ -417,7 +414,7 @@ int logger_main(int argc, char** argv,
         subs.push_back(ft_sub);
     }
 
-    for(auto imu : xbi.getImu())
+    for(auto imu : model->getImu())
     {
         auto imu_sub = nh.subscribe<sensor_msgs::Imu>(
                     "imu/" + imu.first, 15,

@@ -1,14 +1,15 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.15)
 project(xbot_ros)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+set(CMAKE_CXX_STANDARD 17)
+add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED roscpp) 
-find_package(XBotInterface REQUIRED)
+find_package(catkin REQUIRED roscpp tf_conversions eigen_conversions visualization_msgs)
+find_package(xbot2_interface REQUIRED)
 find_package(xbot_msgs REQUIRED)
 
 ## System dependencies are found with CMake's conventions
@@ -111,28 +112,42 @@ catkin_package(
 ## Build ##
 ###########
 
-add_compile_options(-std=c++11)
-
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
 # include
-   ${XBotInterface_INCLUDE_DIRS} 
    ${catkin_INCLUDE_DIRS}
    ${xbot_msgs_INCLUDE_DIRS}
 )
 
 find_package(matlogger2 QUIET)
+
 if(${matlogger2_FOUND})
     add_executable(robot_state_logger src/robot_state_logger.cpp)
-    target_link_libraries(robot_state_logger ${catkin_LIBRARIES} ${XBotInterface_LIBRARIES} matlogger2::matlogger2)
-    set_target_properties(robot_state_logger PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+    target_link_libraries(robot_state_logger
+        ${catkin_LIBRARIES}
+        xbot2_interface::xbot2_interface
+        matlogger2::matlogger2)
+
     install(TARGETS robot_state_logger
       ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
       RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
     )
 endif()
+
+add_executable(robot_collision_publisher src/robot_collision_publisher_node.cpp)
+
+target_link_libraries(robot_collision_publisher
+    ${catkin_LIBRARIES}
+    xbot2_interface::collision)
+
+install(TARGETS robot_collision_publisher
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -143,26 +158,6 @@ endif()
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 # add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-## With catkin_make all packages are built within a single CMake context
-## The recommended prefix ensures that target names across packages don't collide
-add_executable(torque_offset_calib src/torque_offset_calib.cpp)
-
-target_link_libraries(torque_offset_calib
-  PRIVATE
-  ${catkin_LIBRARIES}
-  ${XBotInterface_LIBRARIES}
-  yaml-cpp
-)
-
-target_compile_definitions(torque_offset_calib PRIVATE -DYAML_DEST_PATH="${CMAKE_CURRENT_BINARY_DIR}/tau_offset.yaml")
-
-install(TARGETS torque_offset_calib
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
